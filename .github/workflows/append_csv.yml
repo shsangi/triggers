@@ -25,6 +25,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Important: Fetch all history to avoid conflicts
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,10 +38,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+          echo "✅ Pulled latest changes"
+      
       - name: Run Python script
         run: python generate_data.py
       
+      - name: Check if CSV has new rows
+        id: check_changes
+        run: |
+          # Count rows in CSV
+          if [ -f "data_log.csv" ]; then
+            ROWS=$(wc -l < data_log.csv)
+            echo "📊 CSV has $ROWS rows"
+            
+            # Check if file was modified
+            if git status --porcelain | grep -q "data_log.csv"; then
+              echo "✅ CSV has changes to commit"
+              echo "changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "❌ No changes detected in CSV"
+              echo "changed=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "❌ CSV not found!"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -53,22 +82,16 @@ jobs:
           # Add the CSV file
           git add data_log.csv
           
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "🤖 Auto-update: Added new row at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            git push origin HEAD:${GITHUB_REF}
-            echo "✅ Changes committed and pushed"
-          fi
+          # Commit and push
+          git commit -m "🤖 Auto-update: Added new row at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push origin main
+          echo "✅ Changes committed and pushed"
       
-      - name: Verify CSV was created/updated
+      - name: Show current CSV content
         run: |
           if [ -f "data_log.csv" ]; then
-            echo "✅ CSV exists with $(wc -l < data_log.csv) rows"
-            echo "📊 Last 3 rows:"
-            tail -3 data_log.csv
-          else
-            echo "❌ CSV not found!"
-            exit 1
+            echo "📊 Current CSV content:"
+            cat data_log.csv
+            echo ""
+            echo "✅ Total rows: $(wc -l < data_log.csv)"
           fi
