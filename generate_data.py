@@ -14,7 +14,7 @@ def main():
     now = datetime.now()
     pakistan_now = get_pakistan_time()
     
-    # ALWAYS add a new row - no checks, no conditions
+    # ALWAYS add a new row
     if os.path.exists(csv_file):
         try:
             df = pd.read_csv(csv_file)
@@ -24,7 +24,7 @@ def main():
     else:
         next_srno = 1
     
-    # Create new row with current timestamps
+    # Create new row
     new_row = pd.DataFrame([{
         'srno': next_srno,
         'current_pakistan_timestamp': pakistan_now.strftime('%Y-%m-%d %H:%M:%S'),
@@ -33,7 +33,7 @@ def main():
         'tag': 'testing'
     }])
     
-    # Append to CSV (create if doesn't exist)
+    # Append to CSV
     if os.path.exists(csv_file):
         new_row.to_csv(csv_file, mode='a', header=False, index=False)
     else:
@@ -41,10 +41,10 @@ def main():
     
     print(f"✅ Added row {next_srno} at {pakistan_now.strftime('%H:%M:%S')}")
     
-    # Force file to be written
+    # Create verification file
     with open('last_run.txt', 'w') as f:
         f.write(f"Last run: {datetime.now()}\n")
-        f.write(f"Row added: {next_srno}")
+        f.write(f"Rows in CSV: {next_srno}\n")
 
 if __name__ == "__main__":
     main()
