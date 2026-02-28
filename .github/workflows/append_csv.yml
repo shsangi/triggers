@@ -3,7 +3,7 @@ name: Append CSV with Timestamps
 on:
   schedule:
     - cron: '* * * * *'  # Every minute
-  workflow_dispatch:      # Manual trigger
+  workflow_dispatch:
 
 jobs:
   append-to-csv:
@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,21 +31,8 @@ jobs:
       
       - name: Commit and push changes
         run: |
-          # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # Add CSV
-          git add data_log.csv
-          
-          # Check if there are changes
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
-          
-          # Commit
-          git commit -m "🤖 Update CSV #$(date +%s)"
-          
-          # Push (simple, no complex retry logic)
+          git add data_log.csv last_run.txt
+          git commit -m "🤖 Add row #$(date +%s)"
           git push
