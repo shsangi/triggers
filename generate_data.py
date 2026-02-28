@@ -5,17 +5,17 @@ import os
 
 def get_pakistan_time():
     pakistan_tz = pytz.timezone('Asia/Karachi')
-    return datetime.now(pakistan_tz).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now(pakistan_tz)
 
 def main():
     csv_file = 'data_log.csv'
     
-    # Get current timestamps
-    current_pakistan_time = get_pakistan_time()
-    script_run_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+    # Get current time
+    now = datetime.now()
+    pakistan_now = get_pakistan_time()
     
-    # Determine next serial number
-    if os.path.exists(csv_file) and os.path.getsize(csv_file) > 0:
+    # ALWAYS add a new row - no checks, no conditions
+    if os.path.exists(csv_file):
         try:
             df = pd.read_csv(csv_file)
             next_srno = len(df) + 1
@@ -24,26 +24,27 @@ def main():
     else:
         next_srno = 1
     
-    # Create new row
+    # Create new row with current timestamps
     new_row = pd.DataFrame([{
         'srno': next_srno,
-        'current_pakistan_timestamp': current_pakistan_time,
-        'script_run_timestamp': script_run_timestamp,
+        'current_pakistan_timestamp': pakistan_now.strftime('%Y-%m-%d %H:%M:%S'),
+        'script_run_timestamp': now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
         'script_end_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
         'tag': 'testing'
     }])
     
-    # Write to CSV
-    if os.path.exists(csv_file) and os.path.getsize(csv_file) > 0:
+    # Append to CSV (create if doesn't exist)
+    if os.path.exists(csv_file):
         new_row.to_csv(csv_file, mode='a', header=False, index=False)
     else:
         new_row.to_csv(csv_file, index=False)
     
-    print(f"✅ Added row {next_srno} at {current_pakistan_time}")
+    print(f"✅ Added row {next_srno} at {pakistan_now.strftime('%H:%M:%S')}")
     
-    # Verify
-    df = pd.read_csv(csv_file)
-    print(f"📊 Total rows: {len(df)}")
+    # Force file to be written
+    with open('last_run.txt', 'w') as f:
+        f.write(f"Last run: {datetime.now()}\n")
+        f.write(f"Row added: {next_srno}")
 
 if __name__ == "__main__":
     main()
