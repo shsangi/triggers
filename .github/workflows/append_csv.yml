@@ -2,21 +2,16 @@ name: Append CSV with Timestamps
 
 on:
   schedule:
-    - cron: '* * * * *'  # Runs every minute
+    - cron: '* * * * *'  # Still runs every minute
   workflow_dispatch:      # Manual trigger
   push:
     branches: [ main ]
-    paths:
-      - '.github/workflows/append_csv.yml'
-      - 'generate_data.py'
-      - 'requirements.txt'
 
 jobs:
   append-to-csv:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     
-    # Grant write permissions to GITHUB_TOKEN
     permissions:
       contents: write
     
@@ -25,7 +20,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Important: Fetch all history to avoid conflicts
           fetch-depth: 0
       
       - name: Set up Python
@@ -36,62 +30,59 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pandas pytz
       
-      - name: Pull latest changes
+      - name: Pull latest changes with retry
         run: |
-          git pull origin main
-          echo "✅ Pulled latest changes"
+          for i in {1..3}; do
+            if git pull origin main; then
+              break
+            fi
+            echo "Pull failed, retrying in 5s..."
+            sleep 5
+          done
       
       - name: Run Python script
         run: python generate_data.py
       
-      - name: Check if CSV has new rows
-        id: check_changes
-        run: |
-          # Count rows in CSV
-          if [ -f "data_log.csv" ]; then
-            ROWS=$(wc -l < data_log.csv)
-            echo "📊 CSV has $ROWS rows"
-            
-            # Check if file was modified
-            if git status --porcelain | grep -q "data_log.csv"; then
-              echo "✅ CSV has changes to commit"
-              echo "changed=true" >> $GITHUB_OUTPUT
-            else
-              echo "❌ No changes detected in CSV"
-              echo "changed=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "❌ CSV not found!"
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Commit and push changes
-        if: steps.check_changes.outputs.changed == 'true'
+      - name: Commit and push with conflict resolution
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # Set the remote URL with token authentication
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           
-          # Add the CSV file
+          # Add CSV
           git add data_log.csv
           
-          # Commit and push
-          git commit -m "🤖 Auto-update: Added new row at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          git push origin main
-          echo "✅ Changes committed and pushed"
+          # Commit if changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git commit -m "🤖 Auto-update: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          # Push with retry and rebase
+          for i in {1..5}; do
+            if git push origin main; then
+              echo "✅ Push successful"
+              exit 0
+            fi
+            
+            echo "Push failed (attempt $i/5), pulling latest..."
+            git pull origin main --rebase
+            sleep 5
+          done
+          
+          echo "❌ Failed to push after 5 attempts"
+          exit 1
       
-      - name: Show current CSV content
+      - name: Verify record count
         run: |
           if [ -f "data_log.csv" ]; then
-            echo "📊 Current CSV content:"
-            cat data_log.csv
-            echo ""
-            echo "✅ Total rows: $(wc -l < data_log.csv)"
+            COUNT=$(wc -l < data_log.csv)
+            echo "📊 Total records: $((COUNT-1))"  # Subtract header
           fi
