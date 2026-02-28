@@ -3,7 +3,9 @@ name: Append CSV with Timestamps
 on:
   schedule:
     - cron: '*/5 * * * *'  # Every 5 minutes
-  workflow_dispatch:        # Manual trigger
+  workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   append-to-csv:
@@ -30,7 +32,7 @@ jobs:
       - name: Run Python script
         run: python generate_data.py
       
-      - name: Force commit and push
+      - name: Commit and push changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -39,23 +41,20 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           
-          # Pull latest changes FIRST (critical!)
-          git pull origin main --rebase
-          
-          # Add files (even if they haven't changed, this ensures we check)
+          # Add files first (stage changes)
           git add data_log.csv last_run.txt
           
-          # Check if there are actual changes
+          # Check if there are changes to commit
           if git diff --staged --quiet; then
-            echo "No changes detected in files"
-            
-            # Force a change to last_run.txt to ensure commit happens
-            echo "Force update at $(date)" >> last_run.txt
-            git add last_run.txt
+            echo "No changes to commit"
+            exit 0
           fi
           
-          # Commit (will always have something now)
-          git commit -m "🤖 Auto-update at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          # Commit the changes
+          git commit -m "🤖 Auto-update at $(date -u)"
+          
+          # Now pull with rebase (no unstaged changes since we committed)
+          git pull origin main --rebase
           
           # Push with retry
           for i in {1..3}; do
