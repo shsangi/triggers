@@ -6,15 +6,25 @@ on:
   workflow_dispatch:      # Manual trigger
   push:
     branches: [ main ]
+    paths:
+      - '.github/workflows/append_csv.yml'
+      - 'generate_data.py'
+      - 'requirements.txt'
 
 jobs:
   append-to-csv:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     
+    # Grant write permissions to GITHUB_TOKEN
+    permissions:
+      contents: write
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,13 +40,35 @@ jobs:
         run: python generate_data.py
       
       - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # Set the remote URL with token authentication
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          
+          # Add the CSV file
           git add data_log.csv
+          
+          # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "🤖 Auto-update: Added new row at $(date)"
-            git push
+            git commit -m "🤖 Auto-update: Added new row at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            git push origin HEAD:${GITHUB_REF}
+            echo "✅ Changes committed and pushed"
+          fi
+      
+      - name: Verify CSV was created/updated
+        run: |
+          if [ -f "data_log.csv" ]; then
+            echo "✅ CSV exists with $(wc -l < data_log.csv) rows"
+            echo "📊 Last 3 rows:"
+            tail -3 data_log.csv
+          else
+            echo "❌ CSV not found!"
+            exit 1
           fi
