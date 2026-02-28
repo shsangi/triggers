@@ -14,15 +14,18 @@ def main():
     now = datetime.now()
     pakistan_now = get_pakistan_time()
     
-    # ALWAYS add a new row
-    if os.path.exists(csv_file):
+    # Read existing CSV or create new
+    if os.path.exists(csv_file) and os.path.getsize(csv_file) > 0:
         try:
             df = pd.read_csv(csv_file)
             next_srno = len(df) + 1
-        except:
+            print(f"📊 Existing rows: {len(df)}")
+        except Exception as e:
+            print(f"⚠️ Error reading CSV: {e}")
             next_srno = 1
     else:
         next_srno = 1
+        print("📁 Creating new CSV")
     
     # Create new row
     new_row = pd.DataFrame([{
@@ -34,7 +37,7 @@ def main():
     }])
     
     # Append to CSV
-    if os.path.exists(csv_file):
+    if os.path.exists(csv_file) and os.path.getsize(csv_file) > 0:
         new_row.to_csv(csv_file, mode='a', header=False, index=False)
     else:
         new_row.to_csv(csv_file, index=False)
@@ -44,7 +47,15 @@ def main():
     # Create verification file
     with open('last_run.txt', 'w') as f:
         f.write(f"Last run: {datetime.now()}\n")
-        f.write(f"Rows in CSV: {next_srno}\n")
+        f.write(f"Row added: {next_srno}\n")
+        f.write(f"Pakistan time: {pakistan_now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    
+    # Double-check CSV was written
+    if os.path.exists(csv_file):
+        final_df = pd.read_csv(csv_file)
+        print(f"📊 Total rows now: {len(final_df)}")
+    else:
+        print("❌ CSV not found after write!")
 
 if __name__ == "__main__":
     main()
