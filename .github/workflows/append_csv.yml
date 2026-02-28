@@ -2,25 +2,18 @@ name: Append CSV with Timestamps
 
 on:
   schedule:
-    - cron: '* * * * *'  # Still runs every minute
+    - cron: '* * * * *'  # Every minute
   workflow_dispatch:      # Manual trigger
-  push:
-    branches: [ main ]
 
 jobs:
   append-to-csv:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-    
     permissions:
       contents: write
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,60 +22,28 @@ jobs:
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install pandas pytz
-      
-      - name: Pull latest changes with retry
-        run: |
-          for i in {1..3}; do
-            if git pull origin main; then
-              break
-            fi
-            echo "Pull failed, retrying in 5s..."
-            sleep 5
-          done
       
       - name: Run Python script
         run: python generate_data.py
       
-      - name: Commit and push with conflict resolution
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push changes
         run: |
           # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           
           # Add CSV
           git add data_log.csv
           
-          # Commit if changes
+          # Check if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           
-          git commit -m "🤖 Auto-update: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          # Commit
+          git commit -m "🤖 Update CSV #$(date +%s)"
           
-          # Push with retry and rebase
-          for i in {1..5}; do
-            if git push origin main; then
-              echo "✅ Push successful"
-              exit 0
-            fi
-            
-            echo "Push failed (attempt $i/5), pulling latest..."
-            git pull origin main --rebase
-            sleep 5
-          done
-          
-          echo "❌ Failed to push after 5 attempts"
-          exit 1
-      
-      - name: Verify record count
-        run: |
-          if [ -f "data_log.csv" ]; then
-            COUNT=$(wc -l < data_log.csv)
-            echo "📊 Total records: $((COUNT-1))"  # Subtract header
-          fi
+          # Push (simple, no complex retry logic)
+          git push
